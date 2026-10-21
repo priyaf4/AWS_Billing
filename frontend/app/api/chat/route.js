@@ -4,11 +4,12 @@ import { getSessionUser } from "@/lib/session";
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
 
 export async function POST(request) {
-  if (!getSessionUser(request)) {
+  const user = getSessionUser(request);
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { message } = await request.json().catch(() => ({}));
+  const { message, conversationId } = await request.json().catch(() => ({}));
   if (!message?.trim()) {
     return NextResponse.json({ error: "Message is required" }, { status: 400 });
   }
@@ -17,15 +18,16 @@ export async function POST(request) {
   try {
     const res = await fetch(`${BACKEND_URL}/api/v1/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: message.trim() }),
+      // The backend trusts X-User-Id because only this server can reach it.
+      headers: { "Content-Type": "application/json", "X-User-Id": user },
+      body: JSON.stringify({ message: message.trim(), conversation_id: conversationId || null }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       const error = typeof data.detail === "string" ? data.detail : "Backend request failed";
       return NextResponse.json({ error }, { status: res.status });
     }
-    return NextResponse.json({ reply: data.reply });
+    return NextResponse.json({ reply: data.reply, conversationId: data.conversation_id });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Could not reach backend" }, { status: 502 });

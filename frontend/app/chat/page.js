@@ -9,6 +9,8 @@ export default function ChatPage() {
   ]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  // Set by the first reply; a page refresh clears it and starts a new conversation.
+  const [conversationId, setConversationId] = useState(null);
   const bottomRef = useRef(null);
 
   useEffect(() => {
@@ -28,9 +30,10 @@ export default function ChatPage() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ message: text, conversationId }),
       });
       const data = await res.json();
+      if (res.ok && data.conversationId) setConversationId(data.conversationId);
       const reply = res.ok ? data.reply : `Error: ${data.error || "request failed"}`;
       setMessages((m) => [...m, { role: "assistant", text: reply }]);
     } catch {

@@ -14,16 +14,20 @@ Frontend (Next.js)          checks the user is logged in, then forwards the mess
    ▼
 Backend (this folder)
    api/v1/chat.py           1. receives the HTTP request, validates it
-   services/chat_service.py 2. decides what to do (pick prompt, later: search documents)
-   genai/llm.py             3. calls the Claude API
+   services/chat_service.py 2. decides what to do (load history, pick prompt)
+   infra/chat_history.py    3. loads the last 20 messages from DynamoDB
+   genai/llm.py             4. calls Claude (Amazon Bedrock) with history + question
+   infra/chat_history.py    5. saves the question and answer to DynamoDB
    │
    ▼
-Claude API  ──► answer travels back up the same path ──► shown in chat
+answer + conversation_id travel back up ──► shown in chat
 ```
+
+The frontend keeps the `conversation_id` and sends it with the next question, so Claude remembers the conversation. Refreshing the page starts a new conversation.
 
 Each layer only calls the layer below it. That keeps every file small and easy to change:
 - Change the LLM provider → edit only `genai/llm.py`
-- Change the assistant's behaviour → edit only `genai/prompts/billing_assistant.md`
+- Change the assistant's behaviour → edit only `genai/prompts.py` (all prompts live there)
 - Add a new endpoint → add a file in `api/v1/`
 
 ## Folder map
@@ -36,7 +40,8 @@ backend/
 │   │   └── v1/             version 1 of the API          → app/api/v1/README.md
 │   ├── services/           business logic                → app/services/README.md
 │   ├── genai/              everything AI / LLM           → app/genai/README.md
-│   │   └── prompts/        prompt text files             → app/genai/prompts/README.md
+│   │   └── prompts.py      ALL prompts, in one file
+│   ├── infra/              databases & AWS services      → app/infra/README.md
 │   ├── schemas/            request/response shapes       → app/schemas/README.md
 │   └── core/               settings and shared basics    → app/core/README.md
 ├── tests/                  automated tests               → tests/README.md
@@ -84,6 +89,8 @@ Tests use a fake chat service, so they never call Claude and cost nothing.
 | `CLAUDE_MODEL` | Which Claude model to use. Bedrock: `global.anthropic.claude-haiku-4-5-20251001-v1:0` |
 | `CLAUDE_EFFORT` | `low` … `max`: how hard Claude thinks. Leave empty for Haiku 4.5, which doesn't support it. |
 | `CLAUDE_MAX_TOKENS` | Maximum length of one answer. If it's too low, long answers get cut off. |
+| `CHAT_TABLE_NAME` | DynamoDB table for chat history (default `chat-history`). The IAM user needs `dynamodb:Query` and `dynamodb:BatchWriteItem` on it. |
+| `CHAT_HISTORY_LIMIT` | How many earlier messages are sent to Claude with each question (default `20`) |
 
 ## Adding dependencies
 
@@ -95,7 +102,6 @@ Test-only tools go under `[project.optional-dependencies] dev`.
 | Feature | Where |
 |---|---|
 | Answer from the PDFs (RAG) | `genai/` (embeddings, retriever) + `services/chat_service.py` |
-| Chat history | `services/chat_service.py` + a database in a new `infra/` folder |
 | Authentication | `core/security.py` + `api/deps.py` |
 | Multi-tenancy | `api/deps.py` (find tenant) + pass tenant through services |
 | Docker | `backend/Dockerfile` |

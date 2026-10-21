@@ -3,6 +3,8 @@ from pydantic import BaseModel, Field, field_validator
 
 class ChatRequest(BaseModel):
     message: str = Field(max_length=4000)
+    # Omit to start a new conversation; send back the id from the previous reply to continue it
+    conversation_id: str | None = Field(default=None, max_length=64, pattern=r"^[A-Za-z0-9-]+$")
 
     @field_validator("message")
     @classmethod
@@ -15,3 +17,4 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     reply: str
+    conversation_id: str

@@ -11,17 +11,18 @@ pytest -v       # show each test name
 
 | File | What it checks |
 |---|---|
-| `test_chat.py` | `/health` works; `/api/v1/chat` returns a reply; blank messages are rejected (`422`); an LLM failure becomes `502` |
+| `test_chat.py` | API layer: `/health`; `/api/v1/chat` returns reply + conversation id; missing user → `401`; bad input → `422`; errors map to `502` / `503` / `404` |
+| `test_chat_service.py` | Business logic: new conversations get an id; history is sent to the LLM; both messages are saved; other users' conversations are blocked; a failed save still returns the answer |
 
-## How they avoid calling Claude
+## How they avoid calling Claude and DynamoDB
 
-Each test replaces the real `ChatService` with a `FakeChatService` using FastAPI's dependency override:
+- **API tests** replace the whole `ChatService` with a `FakeChatService` using FastAPI's dependency override:
+  ```python
+  app.dependency_overrides[get_chat_service] = lambda: FakeChatService(reply="echo")
+  ```
+- **Service tests** build a real `ChatService` but give it a `FakeLLM` and an in-memory `FakeHistory`.
 
-```python
-app.dependency_overrides[get_chat_service] = lambda: FakeChatService(reply="echo")
-```
-
-So tests are fast, free, need no API key, and give the same result on every run, which is what CI/CD needs.
+So tests are fast, free, need no AWS access, and give the same result on every run, which is what CI/CD needs.
 
 ## Adding tests
 

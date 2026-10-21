@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     claude_effort: str | None = None
     claude_max_tokens: int = 4000
 
+    # Chat history (DynamoDB, same AWS region and keys as Bedrock)
+    chat_table_name: str = "chat-history"
+    # How many earlier messages are sent to Claude with each question
+    chat_history_limit: int = 20
+
 
 @lru_cache
 def get_settings() -> Settings:

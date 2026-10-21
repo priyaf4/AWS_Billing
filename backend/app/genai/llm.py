@@ -39,13 +39,18 @@ class ClaudeClient:
         self._settings = settings
         self._client = _make_client(settings)
 
-    async def complete(self, system: str, user_message: str) -> str:
+    @property
+    def model(self) -> str:
+        return self._settings.claude_model
+
+    async def complete(self, system: str, messages: list[dict]) -> str:
+        """`messages` is the conversation so far, oldest first, ending with the user's question."""
         s = self._settings
         params = {
             "model": s.claude_model,
             "max_tokens": s.claude_max_tokens,
             "system": system,
-            "messages": [{"role": "user", "content": user_message}],
+            "messages": messages,
         }
         if s.claude_effort:
             params["output_config"] = {"effort": s.claude_effort}
