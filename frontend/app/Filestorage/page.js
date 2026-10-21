@@ -9,6 +9,33 @@ function formatSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+const IN_PROGRESS = ["pending", "processing"];
+
+function RagStatus({ rag, onIndex, busy }) {
+  switch (rag?.status) {
+    case "ready":
+      return <span className="success">Ready ({rag.chunks} chunks)</span>;
+    case "pending":
+    case "processing":
+      return <span className="muted">Indexing...</span>;
+    case "failed":
+      return (
+        <>
+          <span className="error" title={rag.error}>Failed: {rag.error}</span>{" "}
+          <button className="secondary" onClick={onIndex} disabled={busy}>Retry</button>
+        </>
+      );
+    case "not_indexed":
+      return (
+        <button className="secondary" onClick={onIndex} disabled={busy}>Index</button>
+      );
+    case "superseded":
+      return <span className="muted">Older copy (newer upload is used)</span>;
+    default:
+      return <span className="muted">Ingestor offline</span>;
+  }
+}
+
 export default function FileStoragePage() {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -16,10 +43,12 @@ export default function FileStoragePage() {
   const [selected, setSelected] = useState(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [indexing, setIndexing] = useState(null); // key of the file being sent for indexing
   const fileInputRef = useRef(null);
 
-  async function loadFiles() {
-    setLoading(true);
+  // `quiet` refreshes in the background without the "Loading..." flicker
+  async function loadFiles({ quiet = false } = {}) {
+    if (!quiet) setLoading(true);
     try {
       const res = await fetch("/api/files");
       const data = await res.json();
@@ -29,13 +58,40 @@ export default function FileStoragePage() {
     } catch (err) {
       setError(err.message || "Could not load files");
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   }
 
   useEffect(() => {
     loadFiles();
   }, []);
+
+  // While any file is still being indexed, check again every 3 seconds
+  const anyInProgress = files.some((f) => IN_PROGRESS.includes(f.rag?.status));
+  useEffect(() => {
+    if (!anyInProgress) return;
+    const timer = setInterval(() => loadFiles({ quiet: true }), 3000);
+    return () => clearInterval(timer);
+  }, [anyInProgress]);
+
+  async function handleIndex(file) {
+    setIndexing(file.key);
+    setError("");
+    try {
+      const res = await fetch("/api/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: file.key }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      await loadFiles({ quiet: true });
+    } catch (err) {
+      setError(`Could not index "${file.name}": ${err.message}`);
+    } finally {
+      setIndexing(null);
+    }
+  }
 
   async function handleUpload(e) {
     e.preventDefault();
@@ -52,7 +108,11 @@ export default function FileStoragePage() {
       const res = await fetch("/api/files", { method: "POST", body: form });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setMessage(`Uploaded "${selected.name}"`);
+      setMessage(
+        data.indexing
+          ? `Uploaded "${selected.name}". Indexing it for the chat...`
+          : `Uploaded "${selected.name}", but indexing could not start (${data.indexError}). Use "Index" to retry.`
+      );
       setSelected(null);
       fileInputRef.current.value = "";
       await loadFiles();
@@ -103,6 +163,7 @@ export default function FileStoragePage() {
                   <th>Name</th>
                   <th>Size</th>
                   <th>Uploaded</th>
+                  <th>Knowledge base</th>
                 </tr>
               </thead>
               <tbody>
@@ -115,6 +176,13 @@ export default function FileStoragePage() {
                     </td>
                     <td>{formatSize(f.size)}</td>
                     <td>{new Date(f.lastModified).toLocaleString()}</td>
+                    <td>
+                      <RagStatus
+                        rag={f.rag}
+                        onIndex={() => handleIndex(f)}
+                        busy={indexing === f.key}
+                      />
+                    </td>
                   </tr>
                 ))}
               </tbody>

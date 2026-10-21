@@ -1,3 +1,7 @@
 uvicorn app.main:app --reload --port 8001
 
 BACKEND_URL=http://localhost:8001
+
+
+ingestor:
+    python -m uvicorn app.main:app --reload --port 8002

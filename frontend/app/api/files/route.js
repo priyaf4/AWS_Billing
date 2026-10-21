@@ -3,6 +3,28 @@ import { GetObjectCommand, ListObjectsV2Command, PutObjectCommand } from "@aws-s
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { getSessionUser } from "@/lib/session";
 import { getS3, UPLOAD_PREFIX } from "@/lib/s3";
+import { listDocuments, startIngestion } from "@/lib/ingestor";
+
+// Knowledge-base status per file. Matches on S3 key; an older upload of a re-uploaded file is "superseded".
+async function withRagStatus(files) {
+  let docs;
+  try {
+    docs = await listDocuments();
+  } catch (err) {
+    console.error("Ingestor unavailable:", err.message);
+    return { files: files.map((f) => ({ ...f, rag: { status: "unavailable" } })), ragAvailable: false };
+  }
+  const byKey = new Map(docs.map((d) => [d.s3_key, d]));
+  const names = new Set(docs.map((d) => d.file_name));
+  return {
+    ragAvailable: true,
+    files: files.map((f) => {
+      const doc = byKey.get(f.key);
+      if (doc) return { ...f, rag: { status: doc.status, chunks: doc.chunk_count, error: doc.error } };
+      return { ...f, rag: { status: names.has(f.name) ? "superseded" : "not_indexed" } };
+    }),
+  };
+}
 
 function unauthorized() {
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -43,7 +65,7 @@ export async function GET(request) {
     } while (ContinuationToken);
 
     files.sort((a, b) => new Date(b.lastModified) - new Date(a.lastModified));
-    return NextResponse.json({ files });
+    return NextResponse.json(await withRagStatus(files));
   } catch (err) {
     return serverError(err);
   }
@@ -72,7 +94,15 @@ export async function POST(request) {
         ContentType: file.type || "application/octet-stream",
       })
     );
-    return NextResponse.json({ ok: true, key });
+
+    // The upload has succeeded either way; indexing can be retried from the page.
+    try {
+      await startIngestion(key);
+      return NextResponse.json({ ok: true, key, indexing: true });
+    } catch (err) {
+      console.error("Could not start ingestion:", err.message);
+      return NextResponse.json({ ok: true, key, indexing: false, indexError: err.message });
+    }
   } catch (err) {
     return serverError(err);
   }
