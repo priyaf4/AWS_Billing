@@ -1,0 +1,9 @@
+# Keep secrets and build output out of the image
+.env*
+!.env.example
+node_modules
+.next
+.git
+npm-debug.log*
+Dockerfile
+.dockerignore

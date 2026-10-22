@@ -1,0 +1,32 @@
+# Run all three containers locally, the same images you push to AWS.
+#   docker compose up --build        then open http://localhost:3000
+# Each service reads its own .env file; the frontend's service URLs are overridden to use container names.
+
+services:
+  backend:
+    build: ./backend
+    image: genai-backend:latest
+    env_file: ./backend/.env
+    ports:
+      - "8001:8000"   # host 8001 (8000 is used by another project on this PC)
+
+  ingestor:
+    build: ./ingestor
+    image: rag-ingestor:latest
+    env_file: ./ingestor/.env
+    ports:
+      - "8002:8002"
+
+  frontend:
+    build: ./frontend
+    image: genai-frontend:latest
+    env_file: ./frontend/.env.local
+    environment:
+      BACKEND_URL: http://backend:8000
+      INGESTOR_URL: http://ingestor:8002
+      COOKIE_SECURE: "false"   # local http://localhost
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+      - ingestor

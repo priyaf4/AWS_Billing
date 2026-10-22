@@ -14,7 +14,10 @@ export async function POST(request) {
   res.cookies.set(SESSION_COOKIE, createSession(username), {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    // Secure cookies only travel over HTTPS. Set COOKIE_SECURE=false to test a deployment over plain HTTP.
+    secure: process.env.COOKIE_SECURE
+      ? process.env.COOKIE_SECURE === "true"
+      : process.env.NODE_ENV === "production",
     path: "/",
     maxAge: SESSION_MAX_AGE,
   });

@@ -1,12 +1,17 @@
 """
-One-time admin setup: create the `rag_ingestor` OpenSearch role and map the ingestor's IAM user to it.
+One-time admin setup: create the OpenSearch roles and map AWS identities to them.
+
+  rag_ingestor  write kb-chunks*   mapped to the ingestor's IAM user (+ its ECS task role, if given)
+  rag_reader    search kb-chunks*  mapped to the backend's ECS task role (if given)
 
 Must run with the OpenSearch MASTER user's AWS keys (fine-grained access control admin).
-Safe to run again: it overwrites the role and mapping with the same values.
+Safe to run again: roles are rewritten with the same values, and mappings are ADDED to (existing users and
+backend roles are kept), so running with only --backend-task-role-arn doesn't undo an earlier ingestor mapping.
 
 Usage (from any folder, with a venv that has boto3, e.g. the backend's):
     backend\\.venv\\Scripts\\python ingestor\\scripts\\setup_opensearch_role.py
     ... --env-file <path>   to use keys from a different .env (default: backend/.env)
+    ... --ingestor-task-role-arn <arn> --backend-task-role-arn <arn>   for the ECS deployment
 """
 
 import argparse
@@ -33,7 +38,12 @@ ROLE_DEFINITION = {
         {"index_patterns": ["kb-chunks*"], "allowed_actions": ["crud", "create_index", "manage"]}
     ],
 }
-ROLE_MAPPING = {"users": [INGESTOR_USER_ARN]}
+READER_ROLE = "rag_reader"
+READER_ROLE_DEFINITION = {
+    "description": "Chat backend: search the kb-chunks index only",
+    "cluster_permissions": ["cluster_composite_ops_ro"],
+    "index_permissions": [{"index_patterns": ["kb-chunks*"], "allowed_actions": ["read"]}],
+}
 
 
 def read_env_file(path):
@@ -60,11 +70,30 @@ def request(creds, method, path, body=None):
         return e.code, e.read().decode()
 
 
+def merged_mapping(creds, role, users=(), backend_roles=()):
+    """The role's current mapping plus the given users and backend roles, so a PUT never drops existing entries."""
+    status, current = request(creds, "GET", f"/_plugins/_security/api/rolesmapping/{role}")
+    if status == 200:
+        existing = current.get(role, {})
+    elif status == 404:  # role not mapped yet
+        existing = {}
+    else:
+        raise SystemExit(f"Could not read the current mapping of {role} ({status}): {str(current)[:200]}")
+    return {
+        "users": sorted(set(existing.get("users", [])) | set(users)),
+        "backend_roles": sorted(set(existing.get("backend_roles", [])) | set(backend_roles)),
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--env-file", default=str(DEFAULT_ENV_FILE),
                         help=f".env file holding the master user's AWS keys (default: {DEFAULT_ENV_FILE})")
-    env_file = parser.parse_args().env_file
+    # IAM roles are mapped as OpenSearch "backend roles"; IAM users as "users"
+    parser.add_argument("--ingestor-task-role-arn", help="ECS task role of the ingestor (gets write access)")
+    parser.add_argument("--backend-task-role-arn", help="ECS task role of the chat backend (gets search access)")
+    args = parser.parse_args()
+    env_file = args.env_file
     print("Using keys from:", env_file)
     env = read_env_file(env_file)
 
@@ -79,17 +108,29 @@ def main():
         raise SystemExit(f"These keys are not the OpenSearch master user ({status}): {who}")
     print("Signed in as:", who["user_name"])
 
-    for label, path, body in [
+    ingestor_roles = [args.ingestor_task_role_arn] if args.ingestor_task_role_arn else []
+    steps = [
         ("Create role", f"/_plugins/_security/api/roles/{ROLE}", ROLE_DEFINITION),
-        ("Map user", f"/_plugins/_security/api/rolesmapping/{ROLE}", ROLE_MAPPING),
-    ]:
+        ("Map ingestor", f"/_plugins/_security/api/rolesmapping/{ROLE}",
+         merged_mapping(creds, ROLE, users=[INGESTOR_USER_ARN], backend_roles=ingestor_roles)),
+    ]
+    if args.backend_task_role_arn:
+        steps += [
+            ("Create reader role", f"/_plugins/_security/api/roles/{READER_ROLE}", READER_ROLE_DEFINITION),
+            ("Map backend", f"/_plugins/_security/api/rolesmapping/{READER_ROLE}",
+             merged_mapping(creds, READER_ROLE, backend_roles=[args.backend_task_role_arn])),
+        ]
+
+    for label, path, body in steps:
         status, result = request(creds, "PUT", path, body)
         print(f"{label}: {status} {result}")
         if status not in (200, 201):
             raise SystemExit(1)
 
-    status, mapping = request(creds, "GET", f"/_plugins/_security/api/rolesmapping/{ROLE}")
-    print("Now mapped:", mapping.get(ROLE, {}).get("users"))
+    for role in (ROLE, READER_ROLE):
+        status, mapping = request(creds, "GET", f"/_plugins/_security/api/rolesmapping/{role}")
+        if status == 200:
+            print(f"Now mapped to {role}:", mapping.get(role))
 
 
 if __name__ == "__main__":
