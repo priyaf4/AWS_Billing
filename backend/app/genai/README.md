@@ -8,6 +8,21 @@ Everything specific to **AI / LLMs** lives here, so it's all in one place.
 |---|---|
 | `llm.py` | `ClaudeClient`: the **only** code that calls the Claude API |
 | `prompts.py` | **All prompts in one file**, as named constants (e.g. `BILLING_ASSISTANT`). See below. |
+| `embedder.py` | `Embedder.embed(text)`: turns a question into a vector with Amazon Titan Text Embeddings V2, the same way the ingestor embeds chunks |
+| `retriever.py` | `Retriever.retrieve(query)`: embed → search OpenSearch → return `Passage`s (file, page, text, score) above `RAG_MIN_SCORE` |
+
+## RAG in this folder
+
+RAG = **R**etrieval-**A**ugmented **G**eneration: first find the relevant document passages, then give them to Claude with the question.
+
+```
+query ──► embedder.py (Titan V2, 1024 numbers) ──► infra/vector_store.py (kNN search on kb-chunks)
+      ──► retriever.py (drop passages scoring < 1.15) ──► list of Passage(file_name, page, text, score)
+```
+
+- **Must match the ingestor**: same model, `dimensions=1024`, `normalize=true`, same index. Otherwise the vectors aren't comparable and search returns nonsense.
+- **Score** = 1 + cosine similarity. Measured on your documents: on-topic questions 1.27–1.76, off-topic ("hi", "capital of France") ≤ 1.09. The 1.15 cutoff sits in that gap.
+- **Errors**: AWS/OpenSearch failures become `RetrievalError`. The service then answers without documents rather than failing the chat.
 
 ## llm.py in detail
 
@@ -40,6 +55,16 @@ from app.genai.prompts import BILLING_ASSISTANT
 - **Prompt with placeholders**: write `{name}` in the text and fill it in with `MY_PROMPT.format(name=...)`.
 - **Why one file**: you can see and compare every prompt the app sends, and prompt changes show up clearly in git diffs.
 
+Current prompts:
+
+| Constant | Role |
+|---|---|
+| `BILLING_ASSISTANT` | System prompt: support-assistant persona + rules for using documents (facts only from them, never show placeholders like `{{due_date}}` or internal notes, say "contact support" when not covered) |
+| `QUESTION_WITH_DOCUMENTS` | Wraps the customer's question with the retrieved passages in `<documents>` / `<question>` tags |
+| `DOCUMENT_EXCERPT` | One passage: `<document index source page>text</document>` |
+| `NO_DOCUMENTS_FOUND` | Put in `<documents>` when nothing relevant was found |
+| `SEARCH_QUERY_REWRITE`, `SEARCH_QUERY_INPUT` | Turn a follow-up ("and for 2 lines?") into a standalone search query, or `NONE` for small talk |
+
 ## Why keep it separate?
 
 - Switching models or providers (e.g. Claude via Amazon Bedrock) means changing only this folder.
@@ -47,7 +72,7 @@ from app.genai.prompts import BILLING_ASSISTANT
 
 ## Later additions
 
-| File | Purpose |
+| Idea | Purpose |
 |---|---|
-| `embeddings.py` | Turn text chunks into vectors |
-| `retriever.py` | Find the most relevant PDF chunks for a question |
+| Hybrid search | Combine vector search with keyword search (`text` field), which helps with plan codes and exact names |
+| Reranking | Re-score the top ~20 passages with a reranker model before keeping 5 |

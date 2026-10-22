@@ -15,6 +15,13 @@ class ChatRequest(BaseModel):
         return value
 
 
+class Source(BaseModel):
+    file_name: str
+    page: int
+
+
 class ChatResponse(BaseModel):
     reply: str
     conversation_id: str
+    # Documents the answer was based on (empty when nothing relevant was found)
+    sources: list[Source] = []

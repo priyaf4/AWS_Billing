@@ -22,7 +22,7 @@ Filestorage page ── upload ──► S3 (uploads/)
         Filestorage page polls GET /api/v1/documents and shows: Indexing... → Ready (11 chunks) / Failed
 ```
 
-The chat backend will later **read** from the same OpenSearch index (see "Contract with the chat backend").
+The chat backend **reads** from the same OpenSearch index to answer questions (see "Contract with the chat backend").
 The two services never call each other.
 
 ## Folder map
@@ -101,7 +101,6 @@ A search is: embed the question the same way → `knn` query on `embedding` → 
 
 | Feature | Where |
 |---|---|
-| Chat answers from these documents | Chat backend: `genai/retriever.py` + `services/chat_service.py` |
 | No lost work on restarts or bursts | S3 event → SQS queue → a worker that calls `pipeline.run()` |
 | Delete a document's chunks | `DELETE /api/v1/documents/{doc_id}` + `VectorStore.delete_document()` |
 | DOCX, scanned PDFs | `pipeline/loader.py` (python-docx; Amazon Textract for OCR) |

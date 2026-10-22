@@ -11,6 +11,8 @@ dependencies = [
     "uvicorn[standard]>=0.30",
     "anthropic[bedrock]>=1.15",
     "pydantic-settings>=2.4",
+    "opensearch-py>=2.7",
+    "requests>=2.32",
 ]
 
 [project.optional-dependencies]

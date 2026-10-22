@@ -19,7 +19,8 @@ X-User-Id: admin
 { "message": "Why is my bill higher this month?" }
 ```
 ```json
-{ "reply": "Bills can go up because of ...", "conversation_id": "5f0c2e8a-..." }
+{ "reply": "Bills can go up because of ...", "conversation_id": "5f0c2e8a-...",
+  "sources": [{ "file_name": "FAQs_Telecom_Billing_Chatbot_Knowledge_Base.pdf", "page": 1 }] }
 ```
 
 Follow-up (send the id back so Claude sees the earlier messages):

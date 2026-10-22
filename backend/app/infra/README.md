@@ -7,6 +7,13 @@ Code that talks to **external systems**: databases, storage, queues. Each file w
 | File | System | Purpose |
 |---|---|---|
 | `chat_history.py` | Amazon DynamoDB, table `chat-history` | Save and load chat messages per conversation |
+| `vector_store.py` | Amazon OpenSearch, index `kb-chunks` | **Read-only** kNN search of the chunks the ingestor wrote, filtered by `tenant_id` |
+
+## vector_store.py
+
+`VectorStore.search(vector, top_k)` returns the nearest chunks, each with `score`, `text`, `file_name`, `page`.
+Requests are signed with the backend's AWS keys. The ingestor owns the index (creates and writes it), and this
+service only reads it, so the field names here must match the ingestor's `index_body()`.
 
 ## chat_history.py
 

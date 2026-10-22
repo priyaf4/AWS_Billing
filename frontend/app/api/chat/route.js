@@ -27,7 +27,11 @@ export async function POST(request) {
       const error = typeof data.detail === "string" ? data.detail : "Backend request failed";
       return NextResponse.json({ error }, { status: res.status });
     }
-    return NextResponse.json({ reply: data.reply, conversationId: data.conversation_id });
+    return NextResponse.json({
+      reply: data.reply,
+      conversationId: data.conversation_id,
+      sources: data.sources ?? [],
+    });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Could not reach backend" }, { status: 502 });

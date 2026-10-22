@@ -33,6 +33,17 @@ class Settings(BaseSettings):
     # How many earlier messages are sent to Claude with each question
     chat_history_limit: int = 20
 
+    # RAG: search the knowledge base the ingestor builds. Embedding and index settings must match the ingestor.
+    # Leave OPENSEARCH_ENDPOINT empty to answer without documents.
+    opensearch_endpoint: str | None = None
+    opensearch_index: str = "kb-chunks"
+    embedding_model: str = "amazon.titan-embed-text-v2:0"
+    embedding_dimensions: int = 1024
+    # How many passages are given to Claude, and the minimum similarity score to count as relevant.
+    # Score = 1 + cosine similarity. Measured: on-topic questions 1.27–1.76, off-topic ("hi") ≤ 1.09.
+    rag_top_k: int = 5
+    rag_min_score: float = 1.15
+
 
 @lru_cache
 def get_settings() -> Settings:

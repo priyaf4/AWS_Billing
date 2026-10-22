@@ -11,7 +11,7 @@ FastAPI uses these to:
 
 | File | Models |
 |---|---|
-| `chat.py` | `ChatRequest` (`message`: required, trimmed, not blank, max 4000 chars; `conversation_id`: optional, letters/digits/dashes only) and `ChatResponse` (`reply`, `conversation_id`) |
+| `chat.py` | `ChatRequest` (`message`: required, trimmed, not blank, max 4000 chars; `conversation_id`: optional, letters/digits/dashes only) and `ChatResponse` (`reply`, `conversation_id`, `sources`: list of `Source(file_name, page)`, empty when no document was relevant) |
 
 ## Schemas vs database models
 

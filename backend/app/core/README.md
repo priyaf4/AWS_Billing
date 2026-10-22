@@ -7,6 +7,7 @@ Shared basics that every other layer can use.
 | File | Purpose |
 |---|---|
 | `config.py` | `Settings`: reads configuration from environment variables and `.env`. `get_settings()` returns one cached copy. |
+| `aws.py` | `make_session()`: one boto3 session with the backend's AWS keys, used for Titan embeddings and OpenSearch signing |
 
 ## How config works
 

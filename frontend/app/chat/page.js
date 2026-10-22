@@ -35,7 +35,7 @@ export default function ChatPage() {
       const data = await res.json();
       if (res.ok && data.conversationId) setConversationId(data.conversationId);
       const reply = res.ok ? data.reply : `Error: ${data.error || "request failed"}`;
-      setMessages((m) => [...m, { role: "assistant", text: reply }]);
+      setMessages((m) => [...m, { role: "assistant", text: reply, sources: res.ok ? data.sources : [] }]);
     } catch {
       setMessages((m) => [...m, { role: "assistant", text: "Error: could not reach server" }]);
     } finally {
@@ -52,6 +52,12 @@ export default function ChatPage() {
           {messages.map((m, i) => (
             <div key={i} className={`bubble ${m.role}`}>
               {m.text}
+              {m.sources?.length > 0 && (
+                <div className="sources">
+                  Sources:{" "}
+                  {m.sources.map((s) => `${s.file_name.replace(/\.[^.]+$/, "").replace(/_/g, " ")} (p. ${s.page})`).join(" · ")}
+                </div>
+              )}
             </div>
           ))}
           {sending && <div className="bubble assistant muted">Typing...</div>}

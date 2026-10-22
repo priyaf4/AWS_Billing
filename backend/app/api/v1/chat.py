@@ -16,11 +16,11 @@ async def chat(
     service: ChatService = Depends(get_chat_service),
 ):
     try:
-        reply, conversation_id = await service.answer(user_id, body.message, body.conversation_id)
+        answer = await service.answer(user_id, body.message, body.conversation_id)
     except ConversationNotFound as e:
         raise HTTPException(status_code=404, detail="Conversation not found") from e
     except HistoryError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
     except LLMError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
-    return ChatResponse(reply=reply, conversation_id=conversation_id)
+    return ChatResponse(reply=answer.reply, conversation_id=answer.conversation_id, sources=answer.sources)

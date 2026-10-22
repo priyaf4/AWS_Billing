@@ -5,7 +5,7 @@ from app.api.deps import get_chat_service
 from app.genai.llm import LLMError
 from app.infra.chat_history import HistoryError
 from app.main import app
-from app.services.chat_service import ConversationNotFound
+from app.services.chat_service import ChatAnswer, ConversationNotFound
 
 USER = {"X-User-Id": "alice"}
 
@@ -20,7 +20,11 @@ class FakeChatService:
     async def answer(self, user_id, message, conversation_id=None):
         if self.error:
             raise self.error
-        return f"{self.reply}: {message}", conversation_id or "new-id"
+        return ChatAnswer(
+            f"{self.reply}: {message}",
+            conversation_id or "new-id",
+            [{"file_name": "FAQs.pdf", "page": 2}],
+        )
 
 
 @pytest.fixture
@@ -41,7 +45,11 @@ def test_chat_returns_reply_and_new_conversation_id(client):
     use(FakeChatService(reply="echo"))
     res = client.post("/api/v1/chat", json={"message": "  hi  "}, headers=USER)
     assert res.status_code == 200
-    assert res.json() == {"reply": "echo: hi", "conversation_id": "new-id"}
+    assert res.json() == {
+        "reply": "echo: hi",
+        "conversation_id": "new-id",
+        "sources": [{"file_name": "FAQs.pdf", "page": 2}],
+    }
 
 
 def test_chat_continues_given_conversation(client):
